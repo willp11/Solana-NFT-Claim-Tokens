@@ -19,6 +19,7 @@ pub struct DistributorAccount {
     pub reward_token_account: Pubkey,
     pub reward_mint: Pubkey,
     pub reward_amount: u64,
+    pub amount_claimed: u64,
     pub start_ts: i64,
     pub collection_name: String,
     pub collection_creator: Pubkey // candy machine (/the first creator in token metadata)
