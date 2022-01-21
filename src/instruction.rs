@@ -17,7 +17,7 @@ pub struct CreateTokenDistributorArgs {
     pub reward_amount_total: u64,
     pub reward_amount_per_nft: u64,
     pub start_ts: i64,
-    pub collection_name: String,
+    pub collection_symbol: String,
 }
 
 /// Instructions supported by the Casino program.
@@ -54,7 +54,7 @@ pub fn create_token_distributor(
     reward_amount_total: u64,
     reward_amount_per_nft: u64,
     start_ts: i64,
-    collection_name: String,
+    collection_symbol: String,
 ) -> Instruction {
     Instruction {
         program_id,
@@ -70,7 +70,7 @@ pub fn create_token_distributor(
             reward_amount_total,
             reward_amount_per_nft,
             start_ts,
-            collection_name
+            collection_symbol
         })
         .try_to_vec()
         .unwrap(),

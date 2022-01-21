@@ -22,7 +22,7 @@ pub struct DistributorAccount {
     pub reward_amount_per_nft: u64,
     pub amount_claimed: u64,
     pub start_ts: i64,
-    pub collection_name: String,
+    pub collection_symbol: String,
     pub collection_creator: Pubkey // candy machine (/the first creator in token metadata)
 }
 
