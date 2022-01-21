@@ -7,6 +7,9 @@ use crate::{
     error::DistributorError
 };
 
+// prefix used for PDAs
+pub const PREFIX: &str = "distributor";
+
 pub fn try_from_slice_checked<T: BorshDeserialize>(
     data: &[u8],
     data_size: usize,
