@@ -15,6 +15,8 @@ use solana_program::{
 
 use spl_token::state::Account as TokenAccount;
 
+use spl_token_metadata::state::Metadata as MetadataAccount;
+
 use crate::{
     instruction::ClaimTokenInstruction,
     error::DistributorError,
@@ -177,6 +179,8 @@ pub fn process_claim_tokens<'a>(
     // transfer tokens to claimant_reward_account from distributor_reward_account_info (pda_account signs)
 
     // increment the distributor state amount claimed
+
+    // repack the distributor state
 
     Ok(())
 }
