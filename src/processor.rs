@@ -37,7 +37,8 @@ pub fn process_instruction<'a>(
             process_create_distributor(
                 program_id,
                 accounts,
-                args.reward_amount,
+                args.reward_amount_total,
+                args.reward_amount_per_nft,
                 args.start_ts,
                 args.collection_name
             )
@@ -48,7 +49,8 @@ pub fn process_instruction<'a>(
 pub fn process_create_distributor<'a>(
     program_id: &'a Pubkey,
     accounts: &'a [AccountInfo<'a>],
-    reward_amount: u64,
+    reward_amount_total: u64,
+    reward_amount_per_nft: u64,
     start_ts: i64,
     collection_name: String,
 ) -> ProgramResult {
@@ -78,7 +80,7 @@ pub fn process_create_distributor<'a>(
 
     // check the reward token account has enough tokens
     let reward_token_account = TokenAccount::unpack(&reward_token_account_info.data.borrow())?;
-    if  reward_token_account.amount != reward_amount {
+    if  reward_token_account.amount != reward_amount_total {
         return Err(DistributorError::ExpectedAmountMismatch.into());
     }
 
@@ -116,7 +118,8 @@ pub fn process_create_distributor<'a>(
     distributor_state_account.authority = *authority_account_info.key;
     distributor_state_account.reward_token_account = *reward_token_account_info.key;
     distributor_state_account.reward_mint = reward_token_account.mint;
-    distributor_state_account.reward_amount = reward_amount;
+    distributor_state_account.reward_amount_total = reward_amount_total;
+    distributor_state_account.reward_amount_per_nft = reward_amount_per_nft;
     distributor_state_account.amount_claimed = 0;
     distributor_state_account.start_ts = start_ts;
     distributor_state_account.collection_name = collection_name;
