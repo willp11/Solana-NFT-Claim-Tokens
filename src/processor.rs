@@ -117,6 +117,7 @@ pub fn process_create_distributor<'a>(
     distributor_state_account.reward_token_account = *reward_token_account_info.key;
     distributor_state_account.reward_mint = reward_token_account.mint;
     distributor_state_account.reward_amount = reward_amount;
+    distributor_state_account.amount_claimed = 0;
     distributor_state_account.start_ts = start_ts;
     distributor_state_account.collection_name = collection_name;
     distributor_state_account.collection_creator = *collection_creator_account_info.key;
