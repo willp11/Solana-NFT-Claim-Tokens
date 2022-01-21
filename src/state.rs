@@ -16,8 +16,8 @@ pub const MAX_DISTRIBUTOR_DATA_LENGTH: usize = 1 + 32 + 32 + 32 + 32 + 8 + 8 + M
 pub struct DistributorAccount {
     pub is_initialized: bool,
     pub authority: Pubkey, 
-    pub reward_mint_account: Pubkey,
     pub reward_token_account: Pubkey,
+    pub reward_mint: Pubkey,
     pub reward_amount: u64,
     pub start_ts: i64,
     pub collection_name: String,

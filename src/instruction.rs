@@ -25,7 +25,6 @@ pub enum ClaimTokenInstruction {
     // [signer] authority_account
     // [writable] distributor_state_account
     // [writable] reward_token_account
-    // [] reward_mint_account
     // [] collection_creator_account
     // [] rent sysvar
     // [] token_program_account
@@ -39,7 +38,6 @@ pub fn create_token_distributor(
     authority_account: Pubkey,
     distributor_state_account: Pubkey,
     reward_token_account: Pubkey,
-    reward_mint_account: Pubkey,
     collection_creator_account: Pubkey,
     reward_amount: u64,
     start_ts: i64,
@@ -51,7 +49,6 @@ pub fn create_token_distributor(
             AccountMeta::new(authority_account, true),
             AccountMeta::new(distributor_state_account, false),
             AccountMeta::new(reward_token_account, false),
-            AccountMeta::new_readonly(reward_mint_account, false),
             AccountMeta::new_readonly(collection_creator_account, false),
             AccountMeta::new_readonly(sysvar::rent::id(), false),
             AccountMeta::new_readonly(ID, false),

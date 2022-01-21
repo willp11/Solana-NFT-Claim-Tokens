@@ -4,7 +4,7 @@ use solana_program::{
     // program_error::ProgramError,
     msg,
     pubkey::Pubkey,
-    // program_pack::{Pack},
+    program_pack::{Pack},
     sysvar::{rent::Rent, Sysvar},
     program::{invoke},
     // clock::{Clock},
@@ -13,7 +13,7 @@ use solana_program::{
     // system_instruction
 };
 
-// use spl_token::state::Account as TokenAccount;
+use spl_token::state::Account as TokenAccount;
 
 use crate::{
     instruction::ClaimTokenInstruction,
@@ -56,7 +56,6 @@ pub fn process_create_distributor<'a>(
     let authority_account_info = next_account_info(account_info_iter)?;
     let distributor_state_account_info = next_account_info(account_info_iter)?;
     let reward_token_account_info = next_account_info(account_info_iter)?;
-    let reward_mint_account_info = next_account_info(account_info_iter)?;
     let collection_creator_account_info = next_account_info(account_info_iter)?;
     let rent = &Rent::from_account_info(next_account_info(account_info_iter)?)?;
     let token_program_account = next_account_info(account_info_iter)?;
@@ -75,6 +74,12 @@ pub fn process_create_distributor<'a>(
     // check distributor_state_account_info has enough lamports to be rent exempt
     if !rent.is_exempt(distributor_state_account_info.lamports(), distributor_state_account_info.data_len()) {
         return Err(DistributorError::NotRentExempt.into());
+    }
+
+    // check the reward token account has enough tokens
+    let reward_token_account = TokenAccount::unpack(&reward_token_account_info.data.borrow())?;
+    if  reward_token_account.amount != reward_amount {
+        return Err(DistributorError::ExpectedAmountMismatch.into());
     }
 
     // get the PDA account Pubkey (derived from the distributor_state_account_info Pubkey and prefix "distributor")
@@ -109,8 +114,8 @@ pub fn process_create_distributor<'a>(
     // write the data to state
     distributor_state_account.is_initialized = true;
     distributor_state_account.authority = *authority_account_info.key;
-    distributor_state_account.reward_mint_account = *reward_mint_account_info.key;
     distributor_state_account.reward_token_account = *reward_token_account_info.key;
+    distributor_state_account.reward_mint = reward_token_account.mint;
     distributor_state_account.reward_amount = reward_amount;
     distributor_state_account.start_ts = start_ts;
     distributor_state_account.collection_name = collection_name;
