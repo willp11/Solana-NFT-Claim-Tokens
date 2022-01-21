@@ -14,7 +14,8 @@ use spl_token::ID;
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
 /// Args for create game
 pub struct CreateTokenDistributorArgs {
-    pub reward_amount: u64,
+    pub reward_amount_total: u64,
+    pub reward_amount_per_nft: u64,
     pub start_ts: i64,
     pub collection_name: String,
 }
@@ -29,6 +30,17 @@ pub enum ClaimTokenInstruction {
     // [] rent sysvar
     // [] token_program_account
     CreateTokenDistributor(CreateTokenDistributorArgs),
+
+    // [signer] claimant_main_account
+    // [writable] distributor_state_account (increment amount claimed)
+    // [writable] claimant_reward_account (receives the tokens)
+    // [writable] distributor_reward_account (holds the tokens)
+    // [] pda (has authority to transfer distributor_reward_account tokens)
+    // [] claimant_nft_account (holds the claimant's NFT)
+    // [] nft_metadata_account (holds the metadata about the NFT account - must match the collection_creator and collection_name fields)
+    // [] clock sysvar (check after start_ts field)
+    // [] token_program_account (transfers tokens to claimant)
+    ClaimTokens(),
 }
 
 /// Creates an CreateTokenDistributor instruction
@@ -39,7 +51,8 @@ pub fn create_token_distributor(
     distributor_state_account: Pubkey,
     reward_token_account: Pubkey,
     collection_creator_account: Pubkey,
-    reward_amount: u64,
+    reward_amount_total: u64,
+    reward_amount_per_nft: u64,
     start_ts: i64,
     collection_name: String,
 ) -> Instruction {
@@ -54,10 +67,42 @@ pub fn create_token_distributor(
             AccountMeta::new_readonly(ID, false),
         ],
         data: ClaimTokenInstruction::CreateTokenDistributor(CreateTokenDistributorArgs {
-            reward_amount,
+            reward_amount_total,
+            reward_amount_per_nft,
             start_ts,
             collection_name
         })
+        .try_to_vec()
+        .unwrap(),
+    }
+}
+
+/// Creates a ClaimTokens instruction
+#[allow(clippy::too_many_arguments)]
+pub fn claim_tokens(
+    program_id: Pubkey,
+    claimant_main_account: Pubkey,
+    distributor_state_account: Pubkey,
+    claimant_reward_account: Pubkey,
+    distributor_reward_account: Pubkey,
+    pda_account: Pubkey,
+    claimant_nft_account: Pubkey,
+    nft_metadata_account: Pubkey,
+) -> Instruction {
+    Instruction {
+        program_id,
+        accounts: vec![
+            AccountMeta::new(claimant_main_account, true),
+            AccountMeta::new(distributor_state_account, false),
+            AccountMeta::new(claimant_reward_account, false),
+            AccountMeta::new(distributor_reward_account, false),
+            AccountMeta::new_readonly(pda_account, false),
+            AccountMeta::new_readonly(claimant_nft_account, false),
+            AccountMeta::new_readonly(nft_metadata_account, false),
+            AccountMeta::new_readonly(sysvar::clock::id(), false),
+            AccountMeta::new_readonly(ID, false),
+        ],
+        data: ClaimTokenInstruction::ClaimTokens()
         .try_to_vec()
         .unwrap(),
     }
