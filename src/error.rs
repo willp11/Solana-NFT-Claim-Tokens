@@ -40,6 +40,10 @@ pub enum DistributorError {
     #[error("Invalid accounts")]
     InvalidAccounts,
 
+    // Invalid metadata account
+    #[error("Invalid metadata account")]
+    InvalidMetadataAccount,
+
     // Invalid system program
     #[error("Invalid system program")]
     InvalidSystemProgram,
@@ -54,7 +58,15 @@ pub enum DistributorError {
 
     // Data type mismatch
     #[error("Data type mismatch")]
-    DataTypeMismatch
+    DataTypeMismatch,
+
+    // Distribution not started
+    #[error("Distribution not started")]
+    DistributionNotStarted,
+
+    // Incorrect symbol
+    #[error("Incorrect symbol in metadata")]
+    IncorrectSymbol,
 }
 
 impl PrintProgramError for DistributorError {

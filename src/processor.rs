@@ -1,21 +1,18 @@
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint::ProgramResult,
-    // program_error::ProgramError,
     msg,
     pubkey::Pubkey,
     program_pack::{Pack},
     sysvar::{rent::Rent, Sysvar},
     program::{invoke},
     clock::{Clock},
-    // program_option::COption,
-    // system_program::check_id,
-    // system_instruction
 };
 
 use spl_token::state::Account as TokenAccount;
 
 use spl_token_metadata::state::Metadata as MetadataAccount;
+use spl_token_metadata::error::MetadataError;
 
 use crate::{
     instruction::ClaimTokenInstruction,
@@ -167,20 +164,90 @@ pub fn process_claim_tokens<'a>(
     }
 
     // unpack distributor state
+    let mut distributor_state_account = DistributorAccount::from_account_info(&distributor_state_account_info)?;
 
     // check the current ts is after start_ts
+    if clock.unix_timestamp < distributor_state_account.start_ts {
+        return Err(DistributorError::DistributionNotStarted.into());
+    }
 
-    // check the claimant_nft_account_info (token account state) has "owner" == claimant_main_account_info - ensures claimant owns the NFT account
+    // check the claimant_nft_account_info "owner" == claimant_main_account_info
+    let claimant_nft_account = TokenAccount::unpack(&claimant_nft_account_info.data.borrow())?;
+    if claimant_nft_account.owner != *claimant_main_account_info.key {
+        return Err(DistributorError::IncorrectOwner.into());
+    }
+
+    // pda derived from "metadata", metadata program id, mint account pubkey
+    let metadata_prefix: &str = "metadata";
+    let metadata_seeds = &[
+        metadata_prefix.as_bytes(),
+        spl_token_metadata::ID.as_ref(),
+        claimant_nft_account.mint.as_ref()
+    ];
     // check the nft_metadata_account_info is derived from the claimant_nft_account_info mint and metadata prefix - ensures we have the correct metadata account
-    // check the metadata account data - first creator (candy machine pubkey) and collection name must be same as in distributor state
+    let (metadata_account_pubkey, _bump_seed) = Pubkey::find_program_address(metadata_seeds, &spl_token_metadata::ID);
+    if *nft_metadata_account_info.key != metadata_account_pubkey {
+        return Err(DistributorError::InvalidMetadataAccount.into());
+    }
 
-    // check distributor_reward_account_info is same as in distributor state - (this ensures the pda account is correct as otherwise doesn't have authority to transfer)
-    // get the pda pubkey
+    // check the metadata account data - find the creator in metadata creators
+    let nft_metadata_account = MetadataAccount::from_account_info(&nft_metadata_account_info)?;
+    if let Some(creators) = &nft_metadata_account.data.creators {
+        let mut found = false;
+        for creator in creators {
+            if creator.address == distributor_state_account.collection_creator {
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return Err(MetadataError::CreatorNotFound.into());
+        }
+    } else {
+        return Err(MetadataError::NoCreatorsPresentOnMetadata.into());
+    }
+    // collection symbol must be same as in distributor state
+    let symbol = &nft_metadata_account.data.symbol;
+    if *symbol != distributor_state_account.collection_symbol {
+        return Err(DistributorError::IncorrectSymbol.into());
+    }
+
+    // check distributor_reward_account_info is same as in distributor state
+    if *distributor_reward_account_info.key != distributor_state_account.reward_token_account {
+        return Err(DistributorError::InvalidAccounts.into());
+    }
+
+    // get the PDA account Pubkey (derived from the distributor_state_account_info Pubkey and prefix "distributor")
+    let distributor_seeds = &[
+        PREFIX.as_bytes(),
+        distributor_state_account_info.key.as_ref(),
+    ];
+    let (reward_account_pda, _bump_seed) = Pubkey::find_program_address(distributor_seeds, program_id);
+
     // transfer tokens to claimant_reward_account from distributor_reward_account_info (pda_account signs)
-
+    let transfer_to_claimant_ix = spl_token::instruction::transfer(
+        token_program_account.key, 
+        distributor_reward_account_info.key, // src
+        claimant_reward_account_info.key, // dst
+        &reward_account_pda, // authority
+        &[&reward_account_pda], 
+        distributor_state_account.reward_amount_per_nft,
+    )?;
+    msg!("Calling the token program to transfer tokens to commission account");
+    invoke(
+        &transfer_to_claimant_ix,
+        &[
+            distributor_reward_account_info.clone(),
+            claimant_reward_account_info.clone(),
+            pda_account_info.clone(),
+            token_program_account.clone(),
+        ],
+    )?;
     // increment the distributor state amount claimed
+    distributor_state_account.amount_claimed += distributor_state_account.reward_amount_per_nft;
 
-    // repack the distributor state
+    // pack the distributor state
+    distributor_state_account.serialize(&mut &mut distributor_state_account_info.data.borrow_mut()[..])?;
 
     Ok(())
 }
