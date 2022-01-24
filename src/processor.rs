@@ -5,8 +5,9 @@ use solana_program::{
     pubkey::Pubkey,
     program_pack::{Pack},
     sysvar::{rent::Rent, Sysvar},
-    program::{invoke},
+    program::{invoke, invoke_signed},
     clock::{Clock},
+    system_program::{check_id}
 };
 
 use spl_token::state::Account as TokenAccount;
@@ -18,7 +19,9 @@ use crate::{
     instruction::ClaimTokenInstruction,
     error::DistributorError,
     utils::PREFIX,
-    state::DistributorAccount
+    utils::create_or_allocate_account_raw,
+    state::DistributorAccount,
+    state::ProofOfReceiptAccount
 };
 
 // use std::convert::TryInto;
@@ -86,7 +89,7 @@ pub fn process_create_distributor<'a>(
 
     // check the reward token account has enough tokens
     let reward_token_account = TokenAccount::unpack(&reward_token_account_info.data.borrow())?;
-    if  reward_token_account.amount != reward_amount_total {
+    if  reward_token_account.amount < reward_amount_total {
         return Err(DistributorError::ExpectedAmountMismatch.into());
     }
 
@@ -106,7 +109,7 @@ pub fn process_create_distributor<'a>(
         authority_account_info.key,
         &[&authority_account_info.key],
     )?;
-    msg!("Calling the token program to transfer mint authority to PDA...");
+    msg!("Calling the token program to transfer ownership authority to PDA...");
     invoke(
         &transfer_authority_change_ix,
         &[
@@ -144,14 +147,20 @@ pub fn process_claim_tokens<'a>(
     let account_info_iter = &mut accounts.iter();
     let claimant_main_account_info = next_account_info(account_info_iter)?;
     let distributor_state_account_info = next_account_info(account_info_iter)?;
-    let claimant_reward_account_info = next_account_info(account_info_iter)?;
     let distributor_reward_account_info = next_account_info(account_info_iter)?;
+    let claimant_reward_account_info = next_account_info(account_info_iter)?;
     let pda_account_info = next_account_info(account_info_iter)?;
     let claimant_nft_account_info = next_account_info(account_info_iter)?;
     let nft_metadata_account_info = next_account_info(account_info_iter)?;
+    let proof_receipt_account_info = next_account_info(account_info_iter)?;
     let clock = &Clock::from_account_info(next_account_info(account_info_iter)?)?;
+    let rent_account = next_account_info(account_info_iter)?;
     let token_program_account = next_account_info(account_info_iter)?;
     spl_token::check_program_account(token_program_account.key)?;
+    let system_program_account = next_account_info(account_info_iter)?;
+    if check_id(system_program_account.key) == false {
+        return Err(DistributorError::InvalidSystemProgram.into());
+    }
 
     // check claimant_main_account_info is the tx signer
     if !claimant_main_account_info.is_signer {
@@ -176,7 +185,7 @@ pub fn process_claim_tokens<'a>(
     if claimant_nft_account.owner != *claimant_main_account_info.key {
         return Err(DistributorError::IncorrectOwner.into());
     }
-
+ 
     // pda derived from "metadata", metadata program id, mint account pubkey
     let metadata_prefix: &str = "metadata";
     let metadata_seeds = &[
@@ -199,6 +208,7 @@ pub fn process_claim_tokens<'a>(
                 found = true;
                 break;
             }
+            creator.address.log();
         }
         if !found {
             return Err(MetadataError::CreatorNotFound.into());
@@ -206,23 +216,26 @@ pub fn process_claim_tokens<'a>(
     } else {
         return Err(MetadataError::NoCreatorsPresentOnMetadata.into());
     }
+
     // collection symbol must be same as in distributor state
-    let symbol = &nft_metadata_account.data.symbol;
-    if *symbol != distributor_state_account.collection_symbol {
-        return Err(DistributorError::IncorrectSymbol.into());
-    }
+    // let symbol = &nft_metadata_account.data.symbol;
+    // msg!("symbol: {}", symbol);
+    // msg!("symbol in state: {}", distributor_state_account.collection_symbol);
+    // if *symbol != distributor_state_account.collection_symbol {
+    //     return Err(DistributorError::IncorrectSymbol.into());
+    // }
 
     // check distributor_reward_account_info is same as in distributor state
     if *distributor_reward_account_info.key != distributor_state_account.reward_token_account {
         return Err(DistributorError::InvalidAccounts.into());
     }
-
+ 
     // get the PDA account Pubkey (derived from the distributor_state_account_info Pubkey and prefix "distributor")
     let distributor_seeds = &[
         PREFIX.as_bytes(),
         distributor_state_account_info.key.as_ref(),
     ];
-    let (reward_account_pda, _bump_seed) = Pubkey::find_program_address(distributor_seeds, program_id);
+    let (reward_account_pda, bump_seed) = Pubkey::find_program_address(distributor_seeds, program_id);
 
     // transfer tokens to claimant_reward_account from distributor_reward_account_info (pda_account signs)
     let transfer_to_claimant_ix = spl_token::instruction::transfer(
@@ -233,8 +246,13 @@ pub fn process_claim_tokens<'a>(
         &[&reward_account_pda], 
         distributor_state_account.reward_amount_per_nft,
     )?;
-    msg!("Calling the token program to transfer tokens to commission account");
-    invoke(
+    msg!("Calling the token program to transfer tokens to claimant account");
+    let distributor_transfer_seeds = &[
+        PREFIX.as_bytes(),
+        distributor_state_account_info.key.as_ref(),
+        &[bump_seed]
+    ];
+    invoke_signed(
         &transfer_to_claimant_ix,
         &[
             distributor_reward_account_info.clone(),
@@ -242,12 +260,58 @@ pub fn process_claim_tokens<'a>(
             pda_account_info.clone(),
             token_program_account.clone(),
         ],
+        &[distributor_transfer_seeds]
     )?;
     // increment the distributor state amount claimed
     distributor_state_account.amount_claimed += distributor_state_account.reward_amount_per_nft;
 
     // pack the distributor state
     distributor_state_account.serialize(&mut &mut distributor_state_account_info.data.borrow_mut()[..])?;
+
+    // Proof of receipt account
+    // get account pubkey of account derived from nft mint and "claimed"
+    pub const SEED_STR: &str = "claimed";
+    let find_receipt_seed = &[
+        SEED_STR.as_bytes(),
+        claimant_nft_account.mint.as_ref(),
+    ];
+
+    // check the proof of receipt account given is the correct one
+    let (proof_of_receipt_pubkey, bump_seed) = Pubkey::find_program_address(find_receipt_seed, program_id);
+
+    if proof_of_receipt_pubkey != *proof_receipt_account_info.key {
+        return Err(DistributorError::InvalidAccounts.into());
+    }
+
+    let receipt_authority_seeds = &[
+        SEED_STR.as_bytes(),
+        claimant_nft_account.mint.as_ref(),
+        &[bump_seed],
+    ];
+
+    // create the account
+    create_or_allocate_account_raw(
+        *program_id,
+        proof_receipt_account_info,
+        rent_account,
+        system_program_account,
+        claimant_main_account_info,
+        1,
+        receipt_authority_seeds
+    )?;
+
+    // unpack the proof of receipt account data
+    let mut proof_of_receipt_account = ProofOfReceiptAccount::from_account_info(&proof_receipt_account_info)?;
+    // check that tokens have not already been claimed
+    if proof_of_receipt_account.received_tokens == true {
+        return Err(DistributorError::TokensAlreadyClaimed.into());
+    }    
+
+    // set proof of receipt account received_tokens true
+    proof_of_receipt_account.received_tokens = true;
+
+    // pack proof of receipt state
+    proof_of_receipt_account.serialize(&mut &mut proof_receipt_account_info.data.borrow_mut()[..])?;
 
     Ok(())
 }

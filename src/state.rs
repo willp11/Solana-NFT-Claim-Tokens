@@ -9,8 +9,8 @@ use crate::{
 };
 
 // DISTRIBUTOR ACCOUNT
-pub const MAX_NAME_LENGTH: usize = 32;
-pub const MAX_DISTRIBUTOR_DATA_LENGTH: usize = 1 + 32 + 32 + 32 + 32 + 8 + 8 + MAX_NAME_LENGTH + 32;
+pub const MAX_SYMBOL_LENGTH: usize = 10;
+pub const MAX_DISTRIBUTOR_DATA_LENGTH: usize = 1 + 32 + 32 + 32 + 32 + 8 + 8 + MAX_SYMBOL_LENGTH + 32;
 
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
 pub struct DistributorAccount {
@@ -32,5 +32,19 @@ impl DistributorAccount {
             try_from_slice_checked(&a.data.borrow_mut(), MAX_DISTRIBUTOR_DATA_LENGTH)?;
 
         Ok(distributor)
+    }
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub struct ProofOfReceiptAccount {
+    pub received_tokens: bool
+}
+
+impl ProofOfReceiptAccount {
+    pub fn from_account_info(a: &AccountInfo) -> Result<ProofOfReceiptAccount, ProgramError> {
+        let receipt: ProofOfReceiptAccount =
+            try_from_slice_checked(&a.data.borrow_mut(), 1)?;
+
+        Ok(receipt)
     }
 }

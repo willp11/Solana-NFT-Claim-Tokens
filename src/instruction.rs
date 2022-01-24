@@ -3,9 +3,8 @@ use solana_program::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     sysvar,
+    msg
 };
-
-use spl_token::ID;
 
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
@@ -30,12 +29,13 @@ pub enum ClaimTokenInstruction {
 
     // [signer] claimant_main_account
     // [writable] distributor_state_account (increment amount claimed)
-    // [writable] claimant_reward_account (receives the tokens)
     // [writable] distributor_reward_account (holds the tokens)
+    // [writable] claimant_reward_account (receives the tokens)
     // [] pda (has authority to transfer distributor_reward_account tokens)
     // [] claimant_nft_account (holds the claimant's NFT)
     // [] nft_metadata_account (holds the metadata about the NFT account - must match the collection_creator and collection_name fields)
-    // [] clock sysvar (check after start_ts field)
+    // [] pda_proof_of_receipt 
+    // [] clock sysvar (check now is after start_ts)
     // [] token_program_account (transfers tokens to claimant)
     ClaimTokens(),
 }
@@ -61,7 +61,7 @@ pub fn create_token_distributor(
             AccountMeta::new(reward_token_account, false),
             AccountMeta::new_readonly(collection_creator_account, false),
             AccountMeta::new_readonly(sysvar::rent::id(), false),
-            AccountMeta::new_readonly(ID, false),
+            AccountMeta::new_readonly(spl_token::ID, false),
         ],
         data: ClaimTokenInstruction::CreateTokenDistributor(CreateTokenDistributorArgs {
             reward_amount_total,
@@ -80,24 +80,27 @@ pub fn claim_tokens(
     program_id: Pubkey,
     claimant_main_account: Pubkey,
     distributor_state_account: Pubkey,
-    claimant_reward_account: Pubkey,
     distributor_reward_account: Pubkey,
+    claimant_reward_account: Pubkey,
     pda_account: Pubkey,
     claimant_nft_account: Pubkey,
     nft_metadata_account: Pubkey,
+    proof_of_receipt_account: Pubkey,
 ) -> Instruction {
     Instruction {
         program_id,
         accounts: vec![
             AccountMeta::new(claimant_main_account, true),
             AccountMeta::new(distributor_state_account, false),
-            AccountMeta::new(claimant_reward_account, false),
             AccountMeta::new(distributor_reward_account, false),
+            AccountMeta::new(claimant_reward_account, false),
             AccountMeta::new_readonly(pda_account, false),
             AccountMeta::new_readonly(claimant_nft_account, false),
             AccountMeta::new_readonly(nft_metadata_account, false),
+            AccountMeta::new(proof_of_receipt_account, false),
             AccountMeta::new_readonly(sysvar::clock::id(), false),
-            AccountMeta::new_readonly(ID, false),
+            AccountMeta::new_readonly(sysvar::rent::id(), false),
+            AccountMeta::new_readonly(spl_token::ID, false),
         ],
         data: ClaimTokenInstruction::ClaimTokens()
         .try_to_vec()

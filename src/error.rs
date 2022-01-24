@@ -67,6 +67,10 @@ pub enum DistributorError {
     // Incorrect symbol
     #[error("Incorrect symbol in metadata")]
     IncorrectSymbol,
+
+    // Tokens already claimed
+    #[error("Tokens already claimed")]
+    TokensAlreadyClaimed
 }
 
 impl PrintProgramError for DistributorError {
