@@ -273,11 +273,12 @@ pub fn process_claim_tokens<'a>(
     distributor_state_account.serialize(&mut &mut distributor_state_account_info.data.borrow_mut()[..])?;
 
     // Proof of receipt account
-    // get account pubkey of account derived from nft mint and "claimed"
+    // get account pubkey of account derived from nft mint, distributor key and "claimed"
     pub const SEED_STR: &str = "claimed";
     let find_receipt_seed = &[
         SEED_STR.as_bytes(),
         claimant_nft_account.mint.as_ref(),
+        distributor_state_account_info.key.as_ref()
     ];
 
     // check the proof of receipt account given is the correct one
@@ -290,9 +291,11 @@ pub fn process_claim_tokens<'a>(
     let receipt_authority_seeds = &[
         SEED_STR.as_bytes(),
         claimant_nft_account.mint.as_ref(),
+        distributor_state_account_info.key.as_ref(),
         &[bump_seed],
     ];
 
+    // TX FAILS IF CLAIMANT HAS ALREADY CLAIMED AS CAN'T MAKE THIS ACCOUNT AS ACCOUNT ALREADY IN USE
     // create the account
     create_or_allocate_account_raw(
         *program_id,
@@ -304,13 +307,13 @@ pub fn process_claim_tokens<'a>(
         receipt_authority_seeds
     )?;
 
+    // THIS IS REDUNDANT AS TX FAILS ANYWAY IF USER TRIES TO CREATE THE ACCOUNT AGAIN
     // unpack the proof of receipt account data
     let mut proof_of_receipt_account = ProofOfReceiptAccount::from_account_info(&proof_receipt_account_info)?;
     // check that tokens have not already been claimed
     if proof_of_receipt_account.received_tokens == true {
         return Err(DistributorError::TokensAlreadyClaimed.into());
     }    
-
     // set proof of receipt account received_tokens true
     proof_of_receipt_account.received_tokens = true;
 
