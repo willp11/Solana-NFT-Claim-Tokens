@@ -3,7 +3,7 @@ use solana_program::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     sysvar,
-    msg
+    // _msg
 };
 
 #[repr(C)]

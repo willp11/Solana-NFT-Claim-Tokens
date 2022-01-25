@@ -20,8 +20,10 @@ use crate::{
     error::DistributorError,
     utils::PREFIX,
     utils::create_or_allocate_account_raw,
+    utils::puffed_out_string,
     state::DistributorAccount,
-    state::ProofOfReceiptAccount
+    state::ProofOfReceiptAccount,
+    state::MAX_SYMBOL_LENGTH
 };
 
 // use std::convert::TryInto;
@@ -218,12 +220,14 @@ pub fn process_claim_tokens<'a>(
     }
 
     // collection symbol must be same as in distributor state
-    // let symbol = &nft_metadata_account.data.symbol;
-    // msg!("symbol: {}", symbol);
-    // msg!("symbol in state: {}", distributor_state_account.collection_symbol);
-    // if *symbol != distributor_state_account.collection_symbol {
-    //     return Err(DistributorError::IncorrectSymbol.into());
-    // }
+    let symbol = &nft_metadata_account.data.symbol;
+
+    // puff the symbol in distributor state to match puffed symbol in metadata account
+    let puffed_symbol = puffed_out_string(&distributor_state_account.collection_symbol, MAX_SYMBOL_LENGTH);
+
+    if *symbol != puffed_symbol {
+        return Err(DistributorError::IncorrectSymbol.into());
+    }
 
     // check distributor_reward_account_info is same as in distributor state
     if *distributor_reward_account_info.key != distributor_state_account.reward_token_account {
